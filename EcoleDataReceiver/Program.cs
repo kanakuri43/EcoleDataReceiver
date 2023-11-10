@@ -9,6 +9,7 @@ using System.Net.Mail;
 using System.Net.Security;
 using System.Text;
 using System.Xml.Linq;
+using EcoleDataReceiver.Models;
 using OpenPop.Mime;
 using OpenPop.Pop3;
 
@@ -66,7 +67,7 @@ namespace EcoleDataReceiver
                 Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3Port").Value),
                 Pop3User = doc.Root.Element("Email").Element("Pop3User").Value,
                 Pop3Password = doc.Root.Element("Email").Element("Pop3Password").Value,
-                subjectContains = "asdf"
+                IdentifySubject = doc.Root.Element("Email").Element("IdentifySubject").Value
             };
         }
 
@@ -85,7 +86,7 @@ namespace EcoleDataReceiver
             for (int i = messageCount; i >= 1; i--)
             {
                 var message = client.GetMessage(i);
-                if (message.Headers.Subject.Contains(config.subjectContains) && message.FindAllAttachments().Any())
+                if (message.Headers.Subject.Contains(config.IdentifySubject) && message.FindAllAttachments().Any())
                 {
                     attachmentMessage = message;
                     break;
@@ -106,7 +107,7 @@ namespace EcoleDataReceiver
             }
 
             // Save the CSV attachment to a file
-            var filePath = Path.Combine(Environment.CurrentDirectory, $"{config.InputFolder}{DateTime.Now.ToString("yyyyMMdd_HHmmss")}{csvAttachment.FileName}");
+            var filePath = Path.Combine(Environment.CurrentDirectory, $"{config.InputFolder}{csvAttachment.FileName}");
             File.WriteAllBytes(filePath, csvAttachment.Body);
 
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Attachment saved to {filePath}");
@@ -149,8 +150,8 @@ namespace EcoleDataReceiver
 
         static void InsertOrUpdateData(DataTable dataTable, dynamic config)
         {
-            //Log("Inserting or updating data...");
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Inserting or updating data...");
+            /*
 
             using var connection = new SqlConnection(config.ConnectionString);
             connection.Open();
@@ -159,18 +160,50 @@ namespace EcoleDataReceiver
             // the logic for inserting or updating would be more complex.
             foreach (DataRow row in dataTable.Rows)
             {
-                var cmdText = $"INSERT INTO your_table_name (col1, col2, ... ) VALUES (@value1, @value2, ... )";
+                var sql = $"INSERT INTO your_table_name (col1, col2, ... ) VALUES (@value1, @value2, ... )";
                 // Alternatively, use an UPDATE statement if required.
 
-                using var command = new SqlCommand(cmdText, connection);
+                using var command = new SqlCommand(sql, connection);
                 command.Parameters.AddWithValue("@value1", row["col1"]);
                 command.Parameters.AddWithValue("@value2", row["col2"]);
                 // ... Add other parameters ...
 
                 command.ExecuteNonQuery();
             }
+            */
+            foreach (DataRow row in dataTable.Rows)
+            {
+                using (var context = new AppDbContext())
+                {
 
-            //Log("Data inserted/updated successfully.");
+                    var product = context.Products.FirstOrDefault(p => p.Id == (int)row[0] && p.State == 0);
+                    if (product != null)
+                    {
+                        // Update
+
+                        product.ProductName = row[1].ToString();    // 商品名
+                        //product.State = (int)row[2];
+                        //product.Sundry = (int)row[0];
+                        //product.TaxationType = (int)row[0];
+                        product.ProductCategoryId = (int)row[3];    // 分類コード
+                        product.Unit = row[4].ToString();           // 単位
+                        //product.Price = (int)row[0];
+                        product.Cost = (int)row[0];
+                        product.CatalogPrice = (int)row[0];
+                        product.StockType = (int)row[0];
+                        product.JAN = (int)row[0];
+                        product.ReserveNo1 = (int)row[0];
+                        product.ReserveNo2 = (int)row[0];
+                        product.ProdutNo = row[2].ToString();
+                        product.MakerName = row[1].ToString();
+                        product.IsReadOnly = (int)row[0];
+                        product.UpdatedAt = (int)row[0];
+
+                        context.SaveChanges();
+                    }
+                }
+            }
+
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Data inserted/updated successfully.");
         }
 

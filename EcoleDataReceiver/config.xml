@@ -1,7 +1,7 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
 <Configuration>
   <Database>
-    <ConnectionString>server=172.16.16.72; user id=sa;database=EDC_DB;</ConnectionString>
+    <ConnectionString>server=172.16.3.162; user id=sa;password=Sapassword1;database=PBS_V3_DATA;</ConnectionString>
   </Database>
   <Input>
     <Folder>./input/</Folder>
@@ -11,6 +11,7 @@
     <Pop3Port>995</Pop3Port>
     <Pop3User>t-okita</Pop3User>
     <Pop3Password>cthUVpPB1x</Pop3Password>
+    <IdentifySubject>###EcoleData###</IdentifySubject>
   </Email>
 </Configuration>
 
