@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Net.Security;
+using System.Text;
 using System.Xml.Linq;
 using OpenPop.Mime;
 using OpenPop.Pop3;
@@ -21,21 +22,35 @@ namespace EcoleDataReceiver
             try
             {
                 Console.SetOut(sw); // 出力先を設定
-                Console.WriteLine(string.Format("{0} Starting the process...", DateTime.Now.ToString("HH:mm:ss")));
+                //Console.WriteLine(string.Format("{0} Starting the process...", DateTime.Now.ToString("HH:mm:ss")));
+                Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} Starting the process...");
+
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
                 dynamic config = LoadConfig();
 
                 string csvFilePath = ReceiveMailAndSaveAttachment(config);
+                if (csvFilePath == "") 
+                {
+                    Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} No email with subject containing '{config.subjectContains}' and attachments found.");
+                    return;
+                }
 
                 DataTable dataTable = LoadCSV(csvFilePath);
 
                 InsertOrUpdateData(dataTable, config);
 
-                Log("Process completed successfully.");
+                Console.WriteLine(string.Format("{0} Process completed successfully.", DateTime.Now.ToString("HH:mm:ss")));
             }
             catch (Exception ex)
             {
-                Log($"Error: {ex.Message}");
+                //Console.WriteLine(string.Format("{0} Error: {1}", DateTime.Now.ToString("HH:mm:ss"), ex.Message));
+                Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} {ex.Message}");
+
+            }
+            finally
+            {
+                sw.Dispose();
             }
         }
 
@@ -46,6 +61,7 @@ namespace EcoleDataReceiver
             return new
             {
                 ConnectionString = doc.Root.Element("Database").Element("ConnectionString").Value,
+                InputFolder = doc.Root.Element("Input").Element("Folder").Value,
                 Pop3Server = doc.Root.Element("Email").Element("Pop3Server").Value,
                 Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3Port").Value),
                 Pop3User = doc.Root.Element("Email").Element("Pop3User").Value,
@@ -78,7 +94,8 @@ namespace EcoleDataReceiver
 
             if (attachmentMessage == null)
             {
-                throw new Exception($"No email with subject containing '{config.subjectContains}' and attachments found.");
+                //throw new Exception($"No email with subject containing '{config.subjectContains}' and attachments found.");
+                return "";
             }
 
             // Get the first CSV attachment
@@ -89,10 +106,10 @@ namespace EcoleDataReceiver
             }
 
             // Save the CSV attachment to a file
-            var filePath = Path.Combine(Environment.CurrentDirectory, csvAttachment.FileName);
+            var filePath = Path.Combine(Environment.CurrentDirectory, $"{config.InputFolder}{DateTime.Now.ToString("yyyyMMdd_HHmmss")}{csvAttachment.FileName}");
             File.WriteAllBytes(filePath, csvAttachment.Body);
 
-            Console.WriteLine($"Attachment saved to {filePath}");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Attachment saved to {filePath}");
             return filePath;
         }
 
@@ -100,6 +117,8 @@ namespace EcoleDataReceiver
 
         static DataTable LoadCSV(string filePath)
         {
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Loading CSV File...");
+
             DataTable dataTable = new DataTable();
 
             // CSVファイルを読み込む
@@ -130,7 +149,8 @@ namespace EcoleDataReceiver
 
         static void InsertOrUpdateData(DataTable dataTable, dynamic config)
         {
-            Log("Inserting or updating data...");
+            //Log("Inserting or updating data...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Inserting or updating data...");
 
             using var connection = new SqlConnection(config.ConnectionString);
             connection.Open();
@@ -150,21 +170,9 @@ namespace EcoleDataReceiver
                 command.ExecuteNonQuery();
             }
 
-            Log("Data inserted/updated successfully.");
+            //Log("Data inserted/updated successfully.");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Data inserted/updated successfully.");
         }
 
-
-        static void Log(string message)
-        {
-            var logFolder = "./log/";
-            if (!Directory.Exists(logFolder))
-            {
-                Directory.CreateDirectory(logFolder);
-            }
-
-            var logPath = $"{logFolder}{DateTime.Now:yyyyMMdd-HHmmss}.log";
-            using var writer = new StreamWriter(logPath, true);
-            writer.WriteLine($"[{DateTime.Now}] {message}");
-        }
     }
 }
