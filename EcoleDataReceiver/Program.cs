@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Net.Security;
 using System.Xml.Linq;
 using OpenPop.Mime;
 using OpenPop.Pop3;
@@ -16,15 +17,19 @@ namespace EcoleDataReceiver
     {
         static void Main()
         {
+            StreamWriter sw = new StreamWriter(string.Format(@"log/{0}.log", DateTime.Now.ToString("yyyyMMdd_HHmmss"), true));
             try
             {
-                Log("Starting the process...");
+                Console.SetOut(sw); // 出力先を設定
+                Console.WriteLine(string.Format("{0} Starting the process...", DateTime.Now.ToString("HH:mm:ss")));
 
-                var config = LoadConfig();
+                dynamic config = LoadConfig();
 
-                var csvData = FetchEmailAttachment(config);
+                string csvFilePath = ReceiveMailAndSaveAttachment(config);
 
-                InsertOrUpdateData(csvData, config);
+                DataTable dataTable = LoadCSV(csvFilePath);
+
+                InsertOrUpdateData(dataTable, config);
 
                 Log("Process completed successfully.");
             }
@@ -41,72 +46,83 @@ namespace EcoleDataReceiver
             return new
             {
                 ConnectionString = doc.Root.Element("Database").Element("ConnectionString").Value,
-                Password = doc.Root.Element("Database").Element("Password").Value,
-                TableName = doc.Root.Element("Database").Element("TableName").Value,
-                PopServer = doc.Root.Element("Email").Element("PopServer").Value,
-                PopPort = int.Parse(doc.Root.Element("Email").Element("PopPort").Value),
-                EmailUser = doc.Root.Element("Email").Element("EmailUser").Value,
-                EmailPassword = doc.Root.Element("Email").Element("EmailPassword").Value
+                Pop3Server = doc.Root.Element("Email").Element("Pop3Server").Value,
+                Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3Port").Value),
+                Pop3User = doc.Root.Element("Email").Element("Pop3User").Value,
+                Pop3Password = doc.Root.Element("Email").Element("Pop3Password").Value,
+                subjectContains = "asdf"
             };
         }
 
-        static DataTable FetchEmailAttachment(dynamic config)
+        static string ReceiveMailAndSaveAttachment(dynamic config)
         {
-            Log("Fetching email attachment...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Fetching email attachment...");
 
             using var client = new Pop3Client();
             client.Connect(config.Pop3Server, config.Pop3Port, true);
             client.Authenticate(config.Pop3User, config.Pop3Password);
 
             var messageCount = client.GetMessageCount();
-            var messages = new List<Message>();
-            var attachmentMessage = messages.LastOrDefault(m => m.FindAllAttachments().Any());
+
+            // Find the first message with the specified subject and an attachment
+            Message attachmentMessage = null;
+            for (int i = messageCount; i >= 1; i--)
+            {
+                var message = client.GetMessage(i);
+                if (message.Headers.Subject.Contains(config.subjectContains) && message.FindAllAttachments().Any())
+                {
+                    attachmentMessage = message;
+                    break;
+                }
+            }
+
             if (attachmentMessage == null)
             {
-                throw new Exception("No email with attachments found.");
+                throw new Exception($"No email with subject containing '{config.subjectContains}' and attachments found.");
             }
 
-            var csvAttachment = attachmentMessage.FindAllAttachments().First();
-            var csvStream = new MemoryStream(csvAttachment.Body);
-
-            var dataTable = new DataTable();
-            // Parse the CSV data from the stream into the DataTable...
-            // For this example, we assume simple comma-separated values
-            using var reader = new StreamReader(csvStream);
-            var headers = reader.ReadLine().Split(',');
-            foreach (var header in headers)
+            // Get the first CSV attachment
+            var csvAttachment = attachmentMessage.FindAllAttachments().FirstOrDefault(att => att.FileName.EndsWith(".csv"));
+            if (csvAttachment == null)
             {
-                dataTable.Columns.Add(header);
-            }
-            while (!reader.EndOfStream)
-            {
-                var line = reader.ReadLine();
-                var values = line.Split(',');
-                dataTable.Rows.Add(values);
+                throw new Exception("No CSV attachments found.");
             }
 
-            Log("Fetched and parsed CSV attachment.");
-            return dataTable;
+            // Save the CSV attachment to a file
+            var filePath = Path.Combine(Environment.CurrentDirectory, csvAttachment.FileName);
+            File.WriteAllBytes(filePath, csvAttachment.Body);
+
+            Console.WriteLine($"Attachment saved to {filePath}");
+            return filePath;
         }
 
-        static DataTable LoadCsvToDataTable(string filePath)
+
+
+        static DataTable LoadCSV(string filePath)
         {
-            Log("Loading CSV to DataTable...");
+            DataTable dataTable = new DataTable();
 
-            var dataTable = new DataTable();
-            using var reader = new StreamReader(filePath);
-
-            var headers = reader.ReadLine().Split(',');
-            foreach (var header in headers)
+            // CSVファイルを読み込む
+            using (StreamReader sr = new StreamReader(filePath))
             {
-                dataTable.Columns.Add(header);
-            }
+                // ヘッダー行を読み込んでDataTableのカラムを設定
+                string[] headers = sr.ReadLine().Split(',');
+                foreach (string header in headers)
+                {
+                    dataTable.Columns.Add(header);
+                }
 
-            while (!reader.EndOfStream)
-            {
-                var line = reader.ReadLine();
-                var values = line.Split(',');
-                dataTable.Rows.Add(values);
+                // CSVの各行を読み込んでDataTableの行に追加
+                while (!sr.EndOfStream)
+                {
+                    string[] rows = sr.ReadLine().Split(',');
+                    DataRow dr = dataTable.NewRow();
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        dr[i] = rows[i];
+                    }
+                    dataTable.Rows.Add(dr);
+                }
             }
 
             return dataTable;

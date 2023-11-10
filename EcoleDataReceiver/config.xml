@@ -3,21 +3,14 @@
   <Database>
     <ConnectionString>server=172.16.16.72; user id=sa;database=EDC_DB;</ConnectionString>
   </Database>
-  <Output>
-    <Folder>./output/</Folder>
-  </Output>
+  <Input>
+    <Folder>./input/</Folder>
+  </Input>
   <Email>
-    <To>t-okita@netoffice.obisan.co.jp</To>
-    <From>t-okita@netoffice.obisan.co.jp</From>
-    <SmtpServer>mss290.kagoya.net</SmtpServer>
-    <SmtpPort>587</SmtpPort>
-    <SmtpUser>t-okita</SmtpUser>
-    <SmtpPassword>cthUVpPB1x</SmtpPassword>
-
-    <Pop3Server>pop.example.com</Pop3Server>
+    <Pop3Server>mss290.kagoya.net</Pop3Server>
     <Pop3Port>995</Pop3Port>
-    <Pop3User>pop3_user</Pop3User>
-    <Pop3Password>pop3_password</Pop3Password>
+    <Pop3User>t-okita</Pop3User>
+    <Pop3Password>cthUVpPB1x</Pop3Password>
   </Email>
 </Configuration>
 
