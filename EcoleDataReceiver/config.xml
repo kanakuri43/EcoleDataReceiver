@@ -7,11 +7,26 @@
     <Folder>./input/</Folder>
   </Input>
   <Email>
-    <Pop3Server>mss290.kagoya.net</Pop3Server>
-    <Pop3Port>995</Pop3Port>
-    <Pop3User>t-okita</Pop3User>
-    <Pop3Password>cthUVpPB1x</Pop3Password>
-    <IdentifySubject>###EcoleData###</IdentifySubject>
+    <Pop3>
+      <Server>mss290.kagoya.net</Server>
+      <Port>995</Port>
+      <User>t-okita</User>
+      <Password>cthUVpPB1x</Password>
+      <Subject>### Ecole Data Updated Notifications ###</Subject>
+    </Pop3>
+    <Smtp>
+      <To>t-okita@netoffice.obisan.co.jp</To>
+      <From>t-okita@netoffice.obisan.co.jp</From>
+      <Server>mss290.kagoya.net</Server>
+      <Port>587</Port>
+      <User>t-okita</User>
+      <Password>cthUVpPB1x</Password>
+      <Subject>### Ecole Data Receive ###</Subject>
+    </Smtp>
   </Email>
+  <Company>
+    <Id>6390001009863</Id>
+  </Company>
+
 </Configuration>
 

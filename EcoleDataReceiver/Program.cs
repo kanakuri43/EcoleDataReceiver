@@ -12,6 +12,7 @@ using System.Xml.Linq;
 using EcoleDataReceiver.Models;
 using OpenPop.Mime;
 using OpenPop.Pop3;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace EcoleDataReceiver
 {
@@ -22,24 +23,28 @@ namespace EcoleDataReceiver
             StreamWriter sw = new StreamWriter(string.Format(@"log/{0}.log", DateTime.Now.ToString("yyyyMMdd_HHmmss"), true));
             try
             {
-                Console.SetOut(sw); // 出力先を設定
-                //Console.WriteLine(string.Format("{0} Starting the process...", DateTime.Now.ToString("HH:mm:ss")));
+                // 初期設定
+                Console.SetOut(sw); 
                 Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} Starting the process...");
-
                 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
                 dynamic config = LoadConfig();
 
-                string csvFilePath = ReceiveMailAndSaveAttachment(config);
-                if (csvFilePath == "") 
+                // inputフォルダが空かチェック
+                if (InputDirectoryEmptyCheck(config) == true)
                 {
-                    Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} No email with subject containing '{config.subjectContains}' and attachments found.");
-                    return;
+                    // 空ならばメール受信
+                    ReceiveMailAndSaveAttachment(config);
                 }
 
-                DataTable dataTable = LoadCSV(csvFilePath);
+                // 受信したTSVからDatatableを作る
+                DataTable dataTable = CreateDatatableFromTsv(config);
 
+                // DB更新
                 InsertOrUpdateData(dataTable, config);
+
+                // 更新済みのTSV削除
+
+                // 更新済みのメール削除
 
                 Console.WriteLine(string.Format("{0} Process completed successfully.", DateTime.Now.ToString("HH:mm:ss")));
             }
@@ -62,18 +67,35 @@ namespace EcoleDataReceiver
             return new
             {
                 ConnectionString = doc.Root.Element("Database").Element("ConnectionString").Value,
-                InputFolder = doc.Root.Element("Input").Element("Folder").Value,
-                Pop3Server = doc.Root.Element("Email").Element("Pop3Server").Value,
-                Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3Port").Value),
-                Pop3User = doc.Root.Element("Email").Element("Pop3User").Value,
-                Pop3Password = doc.Root.Element("Email").Element("Pop3Password").Value,
-                IdentifySubject = doc.Root.Element("Email").Element("IdentifySubject").Value
+                InputFolder = doc.Root.Element("Input").Element("Folder").Value,                            
+
+                Pop3Server = doc.Root.Element("Email").Element("Pop3").Element("Server").Value,
+                Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3").Element("Port").Value),
+                Pop3User = doc.Root.Element("Email").Element("Pop3").Element("User").Value,
+                Pop3Password = doc.Root.Element("Email").Element("Pop3").Element("Password").Value,
+
+                EmailTo = doc.Root.Element("Email").Element("Smtp").Element("To").Value,
+                EmailFrom = doc.Root.Element("Email").Element("Smtp").Element("From").Value,
+                SmtpServer = doc.Root.Element("Email").Element("Smtp").Element("Server").Value,
+                SmtpPort = int.Parse(doc.Root.Element("Email").Element("Smtp").Element("Port").Value),
+                SmtpUser = doc.Root.Element("Email").Element("Smtp").Element("User").Value,
+                SmtpPassword = doc.Root.Element("Email").Element("Smtp").Element("Password").Value,
+                
+                Subject = doc.Root.Element("Email").Element("Subject").Value + doc.Root.Element("Company").Element("id").Value
             };
+        
         }
+
+        static bool InputDirectoryEmptyCheck(dynamic config)
+        {
+            Console.WriteLine(string.Format("{0} Checking the input directory is empty...", DateTime.Now.ToString("HH:mm:ss")));
+
+            return true;
+        }
+
 
         static string ReceiveMailAndSaveAttachment(dynamic config)
         {
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Fetching email attachment...");
 
             using var client = new Pop3Client();
             client.Connect(config.Pop3Server, config.Pop3Port, true);
@@ -81,12 +103,11 @@ namespace EcoleDataReceiver
 
             var messageCount = client.GetMessageCount();
 
-            // Find the first message with the specified subject and an attachment
             Message attachmentMessage = null;
             for (int i = messageCount; i >= 1; i--)
             {
                 var message = client.GetMessage(i);
-                if (message.Headers.Subject.Contains(config.IdentifySubject) && message.FindAllAttachments().Any())
+                if (message.Headers.Subject.Contains(config.Subject) && message.FindAllAttachments().Any())
                 {
                     attachmentMessage = message;
                     break;
@@ -100,10 +121,10 @@ namespace EcoleDataReceiver
             }
 
             // Get the first CSV attachment
-            var csvAttachment = attachmentMessage.FindAllAttachments().FirstOrDefault(att => att.FileName.EndsWith(".csv"));
+            var csvAttachment = attachmentMessage.FindAllAttachments().FirstOrDefault(att => att.FileName.EndsWith(".tsv"));
             if (csvAttachment == null)
             {
-                throw new Exception("No CSV attachments found.");
+                throw new Exception("No TSV attachments found.");
             }
 
             // Save the CSV attachment to a file
@@ -116,17 +137,23 @@ namespace EcoleDataReceiver
 
 
 
-        static DataTable LoadCSV(string filePath)
+        static DataTable CreateDatatableFromTsv(dynamic config)
         {
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Loading CSV File...");
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Loading TSV File...");
+
+            string filePath = "";
+            string[] names = Directory.GetFiles($"{config.InputFolder}", "*.tsv");
+            foreach (string name in names)
+            {
+                filePath = $"{config.InputFolder}" + name;
+            }
 
             DataTable dataTable = new DataTable();
 
-            // CSVファイルを読み込む
             using (StreamReader sr = new StreamReader(filePath))
             {
                 // ヘッダー行を読み込んでDataTableのカラムを設定
-                string[] headers = sr.ReadLine().Split(',');
+                string[] headers = sr.ReadLine().Split('\t');
                 foreach (string header in headers)
                 {
                     dataTable.Columns.Add(header);
@@ -135,7 +162,7 @@ namespace EcoleDataReceiver
                 // CSVの各行を読み込んでDataTableの行に追加
                 while (!sr.EndOfStream)
                 {
-                    string[] rows = sr.ReadLine().Split(',');
+                    string[] rows = sr.ReadLine().Split('\t');
                     DataRow dr = dataTable.NewRow();
                     for (int i = 0; i < headers.Length; i++)
                     {
@@ -150,27 +177,8 @@ namespace EcoleDataReceiver
 
         static void InsertOrUpdateData(DataTable dataTable, dynamic config)
         {
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Inserting or updating data...");
-            /*
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Insert or update data...");
 
-            using var connection = new SqlConnection(config.ConnectionString);
-            connection.Open();
-
-            // This is just a simple example. In a real scenario, 
-            // the logic for inserting or updating would be more complex.
-            foreach (DataRow row in dataTable.Rows)
-            {
-                var sql = $"INSERT INTO your_table_name (col1, col2, ... ) VALUES (@value1, @value2, ... )";
-                // Alternatively, use an UPDATE statement if required.
-
-                using var command = new SqlCommand(sql, connection);
-                command.Parameters.AddWithValue("@value1", row["col1"]);
-                command.Parameters.AddWithValue("@value2", row["col2"]);
-                // ... Add other parameters ...
-
-                command.ExecuteNonQuery();
-            }
-            */
             foreach (DataRow row in dataTable.Rows)
             {
                 using (var context = new AppDbContext())
@@ -199,6 +207,32 @@ namespace EcoleDataReceiver
                         product.IsReadOnly = (int)row[0];
                         product.UpdatedAt = (int)row[0];
 
+                        context.SaveChanges();
+                    }
+                    else
+                    {
+                        // Insert
+                        var p = new Product
+                        {
+                            Id = (int)row[0],
+                            State = (int)row[1],
+                            Sundry = (int)row[2],
+                            TaxationType = (int)row[3],
+                            ProductCategoryId = (int)row[4],
+                            Unit = row[5].ToString(),
+                            Price = (int)row[6],
+                            Cost = (int)row[7],
+                            CatalogPrice = (int)row[8],
+                            StockType = (int)row[9],
+                            JAN = (int)row[10],
+                            ReserveNo1 = (int)row[11],
+                            ReserveNo2 = (int)row[12],
+                            ProdutNo = row[13].ToString(),
+                            MakerName = row[14].ToString(),
+                            IsReadOnly = (int)row[15],
+                            UpdatedAt = (int)row[16],
+                        };
+                        context.Products.Add(product);
                         context.SaveChanges();
                     }
                 }
