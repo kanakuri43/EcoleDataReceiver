@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -29,20 +30,25 @@ namespace EcoleDataReceiver
                 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
                 dynamic config = LoadConfig();
 
+                string sqliteFileName = "";
+                string receivedMailId = "";
+
                 // inputフォルダが空かチェック
                 if (InputDirectoryEmptyCheck(config) == true)
                 {
                     // 空ならばメール受信
-                    ReceiveMailAndSaveAttachment(config);
+                    //ReceiveMailAndSaveAttachment(config, ref sqliteFileName, ref receivedMailId);
                 }
 
                 // 受信したTSVからDatatableを作る
-                DataTable dataTable = CreateDatatableFromTsv(config);
+                //DataTable dataTable = CreateDatatableFromTsv(config);
+                DataTable dataTable = CreateDatatableFromSQLite(config);
 
                 // DB更新
-                InsertOrUpdateData(dataTable, config);
+                InsertOrUpdateSqlServer(config, dataTable);
 
-                // 更新済みのTSV削除
+                // 更新済みのsqliteファイル削除
+                DeleteUpdatedSqliteFiles(config, sqliteFileName);
 
                 // 更新済みのメール削除
 
@@ -50,8 +56,7 @@ namespace EcoleDataReceiver
             }
             catch (Exception ex)
             {
-                //Console.WriteLine(string.Format("{0} Error: {1}", DateTime.Now.ToString("HH:mm:ss"), ex.Message));
-                Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} {ex.Message}");
+                Console.WriteLine($"{DateTime.Now.ToString("HH:mm:ss")} Error: {ex.Message}");
 
             }
             finally
@@ -67,7 +72,7 @@ namespace EcoleDataReceiver
             return new
             {
                 ConnectionString = doc.Root.Element("Database").Element("ConnectionString").Value,
-                InputFolder = doc.Root.Element("Input").Element("Folder").Value,                            
+                InputFolder = doc.Root.Element("Input").Element("Folder").Value,
 
                 Pop3Server = doc.Root.Element("Email").Element("Pop3").Element("Server").Value,
                 Pop3Port = int.Parse(doc.Root.Element("Email").Element("Pop3").Element("Port").Value),
@@ -80,8 +85,8 @@ namespace EcoleDataReceiver
                 SmtpPort = int.Parse(doc.Root.Element("Email").Element("Smtp").Element("Port").Value),
                 SmtpUser = doc.Root.Element("Email").Element("Smtp").Element("User").Value,
                 SmtpPassword = doc.Root.Element("Email").Element("Smtp").Element("Password").Value,
-                
-                Subject = doc.Root.Element("Email").Element("Subject").Value + doc.Root.Element("Company").Element("id").Value
+
+                Subject = doc.Root.Element("Email").Element("Smtp").Element("Subject").Value + doc.Root.Element("Company").Element("Id").Value
             };
         
         }
@@ -94,7 +99,7 @@ namespace EcoleDataReceiver
         }
 
 
-        static string ReceiveMailAndSaveAttachment(dynamic config)
+        static string ReceiveMailAndSaveAttachment(dynamic config, ref string filePath, ref string receivedMailId)
         {
 
             using var client = new Pop3Client();
@@ -124,11 +129,11 @@ namespace EcoleDataReceiver
             var csvAttachment = attachmentMessage.FindAllAttachments().FirstOrDefault(att => att.FileName.EndsWith(".tsv"));
             if (csvAttachment == null)
             {
-                throw new Exception("No TSV attachments found.");
+                throw new Exception("No attachments found.");
             }
 
-            // Save the CSV attachment to a file
-            var filePath = Path.Combine(Environment.CurrentDirectory, $"{config.InputFolder}{csvAttachment.FileName}");
+            // Save the sqlite attachment to a file
+            filePath = Path.Combine(Environment.CurrentDirectory, $"{config.InputFolder}{csvAttachment.FileName}");
             File.WriteAllBytes(filePath, csvAttachment.Body);
 
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Attachment saved to {filePath}");
@@ -174,8 +179,36 @@ namespace EcoleDataReceiver
 
             return dataTable;
         }
+        public static DataTable CreateDatatableFromSQLite(dynamic config)
+        {
 
-        static void InsertOrUpdateData(DataTable dataTable, dynamic config)
+            string filePath = "";
+            string[] names = Directory.GetFiles($"{config.InputFolder}", "*.sqlite");
+            foreach (string name in names)
+            {
+                filePath = name;
+            }
+
+
+            DataTable dataTable = new DataTable();
+
+            using (SQLiteConnection sqliteCon = new SQLiteConnection($"Data Source={filePath};Version=3;"))
+            {
+                sqliteCon.Open();
+
+                string query = $"SELECT * FROM updated_items";
+                using (SQLiteCommand command = new SQLiteCommand(query, sqliteCon))
+                {
+                    using (SQLiteDataAdapter adapter = new SQLiteDataAdapter(command))
+                    {
+                        adapter.Fill(dataTable);
+                    }
+                }
+            }
+
+            return dataTable;
+        }
+        static void InsertOrUpdateSqlServer(dynamic config, DataTable dataTable)
         {
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Insert or update data...");
 
@@ -190,12 +223,8 @@ namespace EcoleDataReceiver
                         // Update
 
                         product.ProductName = row[1].ToString();    // 商品名
-                        //product.State = (int)row[2];
-                        //product.Sundry = (int)row[0];
-                        //product.TaxationType = (int)row[0];
                         product.ProductCategoryId = (int)row[3];    // 分類コード
                         product.Unit = row[4].ToString();           // 単位
-                        //product.Price = (int)row[0];
                         product.Cost = (int)row[0];
                         product.CatalogPrice = (int)row[0];
                         product.StockType = (int)row[0];
@@ -241,5 +270,10 @@ namespace EcoleDataReceiver
             Console.WriteLine($"{DateTime.Now:HH:mm:ss} Data inserted/updated successfully.");
         }
 
+
+        static void DeleteUpdatedSqliteFiles(dynamic config, string fileName)
+        {
+
+        }
     }
 }
