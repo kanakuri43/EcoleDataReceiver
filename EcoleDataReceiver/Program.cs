@@ -217,7 +217,7 @@ namespace EcoleDataReceiver
                 using (var context = new AppDbContext())
                 {
 
-                    var product = context.Products.FirstOrDefault(p => p.Id == (int)row[0] && p.State == 0);
+                    var product = context.Products.FirstOrDefault(p => p.Id == row[0].ToString() && p.State == 0);
                     if (product != null)
                     {
                         // Update
@@ -243,23 +243,14 @@ namespace EcoleDataReceiver
                         // Insert
                         var p = new Product
                         {
-                            Id = (int)row[0],
-                            State = (int)row[1],
-                            Sundry = (int)row[2],
-                            TaxationType = (int)row[3],
-                            ProductCategoryId = (int)row[4],
-                            Unit = row[5].ToString(),
-                            Price = (int)row[6],
-                            Cost = (int)row[7],
-                            CatalogPrice = (int)row[8],
-                            StockType = (int)row[9],
-                            JAN = (int)row[10],
-                            ReserveNo1 = (int)row[11],
-                            ReserveNo2 = (int)row[12],
-                            ProdutNo = row[13].ToString(),
-                            MakerName = row[14].ToString(),
-                            IsReadOnly = (int)row[15],
-                            UpdatedAt = (int)row[16],
+                            Id = row[0].ToString(),
+                            ProductName = row[1].ToString(),
+                            ProdutNo = row[2].ToString(),
+                            ProductCategoryId = row[3].ToString(),
+                            Unit = row[4].ToString(),
+                            CatalogPrice = (int)row[5],
+                            MakerName = row[6].ToString(),
+                            UpdatedAt = (int)row[17],
                         };
                         context.Products.Add(product);
                         context.SaveChanges();

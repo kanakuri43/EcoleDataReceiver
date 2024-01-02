@@ -1,7 +1,7 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
 <Configuration>
   <Database>
-    <ConnectionString>server=192.168.140.128; user id=sa;password=Sapassword1;database=PBS_V3_DATA;</ConnectionString>
+    <ConnectionString>server=192.168.140.128; user id=sa;password=Sapassword1;database=PBS_V3_DATA;TrustServerCertificate=true</ConnectionString>
   </Database>
   <Input>
     <Folder>./input/</Folder>

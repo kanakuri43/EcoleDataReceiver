@@ -11,7 +11,7 @@ namespace EcoleDataReceiver.Models
     public class Product
     {
         [Column("商品コード")]
-        public int Id { get; set; }
+        public string Id { get; set; }
 
         [Column("商品名")]
         public string ProductName { get; set; }
@@ -32,16 +32,16 @@ namespace EcoleDataReceiver.Models
         public string Unit { get; set; }
 
         [Column("売価")]
-        public int Price { get; set; }
+        public decimal Price { get; set; }
 
         [Column("原価")]
-        public int Cost { get; set; }
+        public decimal Cost { get; set; }
 
-        [Column("計算定価")]
-        public int CatalogPrice { get; set; }
+        [Column("定価")]
+        public decimal CatalogPrice { get; set; }
 
         [Column("在庫")]
-        public int StockType { get; set; }
+        public decimal StockType { get; set; }
 
         [Column("JANコード")]
         public int JAN { get; set; }
@@ -62,6 +62,6 @@ namespace EcoleDataReceiver.Models
         public int IsReadOnly { get; set; }
 
         [Column("最終更新日時")]
-        public int UpdatedAt { get; set; }
+        public decimal UpdatedAt { get; set; }
     }
 }
